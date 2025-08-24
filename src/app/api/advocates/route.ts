@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
 
     // Build search conditions
     let whereConditions = undefined;
-    if (search && search.length >= 3) {
+    if (search && search.length >= 2) {
       whereConditions = or(
         ilike(advocates.firstName, `%${search}%`),
         ilike(advocates.lastName, `%${search}%`),
@@ -39,65 +39,39 @@ export async function GET(request: NextRequest) {
     // Build the main query with sorting and pagination
     const offset = (page - 1) * limit;
     
-    let results;
-    if (sortBy === 'firstName') {
-      results = await db
-        .select()
-        .from(advocates)
-        .where(whereConditions)
-        .orderBy(sortOrder === 'desc' ? desc(advocates.firstName) : asc(advocates.firstName))
-        .limit(limit)
-        .offset(offset);
-    } else if (sortBy === 'lastName') {
-      results = await db
-        .select()
-        .from(advocates)
-        .where(whereConditions)
-        .orderBy(sortOrder === 'desc' ? desc(advocates.lastName) : asc(advocates.lastName))
-        .limit(limit)
-        .offset(offset);
-    } else if (sortBy === 'city') {
-      results = await db
-        .select()
-        .from(advocates)
-        .where(whereConditions)
-        .orderBy(sortOrder === 'desc' ? desc(advocates.city) : asc(advocates.city))
-        .limit(limit)
-        .offset(offset);
-    } else if (sortBy === 'degree') {
-      results = await db
-        .select()
-        .from(advocates)
-        .where(whereConditions)
-        .orderBy(sortOrder === 'desc' ? desc(advocates.degree) : asc(advocates.degree))
-        .limit(limit)
-        .offset(offset);
-    } else if (sortBy === 'yearsOfExperience') {
-      results = await db
-        .select()
-        .from(advocates)
-        .where(whereConditions)
-        .orderBy(sortOrder === 'desc' ? desc(advocates.yearsOfExperience) : asc(advocates.yearsOfExperience))
-        .limit(limit)
-        .offset(offset);
-    } else if (sortBy === 'phoneNumber') {
-      results = await db
-        .select()
-        .from(advocates)
-        .where(whereConditions)
-        .orderBy(sortOrder === 'desc' ? desc(advocates.phoneNumber) : asc(advocates.phoneNumber))
-        .limit(limit)
-        .offset(offset);
-    } else {
-      // Default sorting by firstName
-      results = await db
-        .select()
-        .from(advocates)
-        .where(whereConditions)
-        .orderBy(asc(advocates.firstName))
-        .limit(limit)
-        .offset(offset);
+    // Determine the sort column
+    let sortColumn;
+    switch (sortBy) {
+      case 'firstName':
+        sortColumn = advocates.firstName;
+        break;
+      case 'lastName':
+        sortColumn = advocates.lastName;
+        break;
+      case 'city':
+        sortColumn = advocates.city;
+        break;
+      case 'degree':
+        sortColumn = advocates.degree;
+        break;
+      case 'yearsOfExperience':
+        sortColumn = advocates.yearsOfExperience;
+        break;
+      case 'phoneNumber':
+        sortColumn = advocates.phoneNumber;
+        break;
+      default:
+        sortColumn = advocates.firstName;
     }
+
+    // Build and execute the query with proper sorting
+    const results = await db
+      .select()
+      .from(advocates)
+      .where(whereConditions)
+      .orderBy(sortOrder === 'desc' ? desc(sortColumn) : asc(sortColumn))
+      .limit(limit)
+      .offset(offset);
     
     return Response.json({
       data: results,
