@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Advocate } from "@/app/types/advocate";
+import { Advocate, SortField, SortDirection } from "@/app/types/advocate";
 
-type SortField = 'firstName' | 'lastName' | 'city' | 'degree' | 'specialties' | 'yearsOfExperience' | 'phoneNumber';
-type SortDirection = 'asc' | 'desc';
+
 
 export default function Home() {
   const [advocates, setAdvocates] = useState<Advocate[]>([]);
@@ -29,7 +28,7 @@ export default function Home() {
 
     console.log("filtering advocates...", value);
     const term = value.toLowerCase();
-    const filtered = advocates.filter((advocate) => {
+    const filtered = advocates?.filter((advocate) => {
       const firstName = advocate.firstName.toLowerCase();
       const lastName = advocate.lastName.toLowerCase();
       const city = advocate.city.toLowerCase();
@@ -68,6 +67,10 @@ export default function Home() {
   };
 
   const getSortedAdvocates = () => {
+    if (!filteredAdvocates) {
+      return [];
+    }
+
     return [...filteredAdvocates].sort((a, b) => {
       let aValue: any;
       let bValue: any;

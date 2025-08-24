@@ -10,3 +10,7 @@ export type Advocate = {
   };
 
   export type Advocates = Advocate[];
+
+  export type SortField = 'firstName' | 'lastName' | 'city' | 'degree' | 'specialties' | 'yearsOfExperience' | 'phoneNumber';
+  
+  export type SortDirection = 'asc' | 'desc';
