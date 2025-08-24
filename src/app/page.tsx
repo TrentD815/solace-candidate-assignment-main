@@ -1,9 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Advocate, SortField, SortDirection } from "@/app/types/advocate";
-
-
 
 export default function Home() {
   const [advocates, setAdvocates] = useState<Advocate[]>([]);
@@ -11,107 +9,109 @@ export default function Home() {
   const [searchTerm, setSearchTerm] = useState("");
   const [sortField, setSortField] = useState<SortField>('firstName');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Fetch advocates with search, sorting, and pagination
+  const fetchAdvocates = useCallback(async (search?: string, page: number = 1, sortBy?: SortField, sortOrder?: SortDirection) => {
+    setIsLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (search && search.length >= 2) {
+        params.append('search', search);
+      }
+      params.append('page', page.toString());
+      params.append('limit', '10');
+      params.append('sortBy', sortBy || sortField);
+      params.append('sortOrder', sortOrder || sortDirection);
+
+      const response = await fetch(`/api/advocates?${params.toString()}`);
+      const data = await response.json();
+      
+      if (data.error) {
+        console.error('API Error:', data.error);
+        return;
+      }
+
+      setFilteredAdvocates(data.data);
+      setAdvocates(data.data);
+      setCurrentPage(data.pagination.page);
+      setTotalPages(data.pagination.totalPages);
+      setTotalCount(data.pagination.total);
+    } catch (error) {
+      console.error('Failed to fetch advocates:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [sortField, sortDirection]);
+
+  // Initial load
   useEffect(() => {
-    console.log("fetching advocates...");
-    fetch("/api/advocates").then((response) => {
-      response.json().then((jsonResponse) => {
-        setAdvocates(jsonResponse.data);
-        setFilteredAdvocates(jsonResponse.data);
-      });
-    });
-  }, []);
+    fetchAdvocates();
+  }, [fetchAdvocates]);
+
+  // Perform search with debouncing
+  const performSearch = useCallback((value: string) => {
+    if (!value || value.length < 2) {
+      setCurrentPage(1);
+      fetchAdvocates();
+      return;
+    }
+
+    setCurrentPage(1);
+    fetchAdvocates(value, 1, sortField, sortDirection);
+  }, [fetchAdvocates, sortField, sortDirection]);
 
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchTerm(value);
 
-    console.log("filtering advocates...", value);
-    const term = value.toLowerCase();
-    const filtered = advocates?.filter((advocate) => {
-      const firstName = advocate.firstName.toLowerCase();
-      const lastName = advocate.lastName.toLowerCase();
-      const city = advocate.city.toLowerCase();
-      const degree = advocate.degree.toLowerCase();
-      const specialties = advocate.specialties.join(" ").toLowerCase()
-      const yearsOfExperience = advocate.yearsOfExperience
-      const phoneNumber = advocate.phoneNumber
+    // Clear any existing timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
 
-      return (
-        firstName.includes(term) ||
-        lastName.includes(term) ||
-        city.includes(term) ||
-        degree.includes(term) ||
-        specialties.includes(term) ||
-        yearsOfExperience.toString().includes(term) ||
-        phoneNumber.toString().includes(term)
-      );
-    });
-
-    setFilteredAdvocates(filtered);
+    // Only search if there are 2 or more characters
+    if (value.length >= 2) {
+      // Debounce the search by 300ms
+      searchTimeoutRef.current = setTimeout(() => {
+        performSearch(value);
+      }, 300);
+    } else if (value.length === 0) {
+      // Immediately show all results if search is cleared
+      setCurrentPage(1);
+      fetchAdvocates();
+    } else {
+      // Show all results if less than 2 characters
+      setCurrentPage(1);
+      fetchAdvocates();
+    }
   };
 
   const onClick = () => {
-    console.log(advocates);
     setSearchTerm("");
-    setFilteredAdvocates(advocates);
+    setCurrentPage(1);
+    fetchAdvocates();
   };
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+      const newSortOrder = sortDirection === 'asc' ? 'desc' : 'asc';
+      setSortDirection(newSortOrder);
+      fetchAdvocates(searchTerm, currentPage, field, newSortOrder);
     } else {
       setSortField(field);
       setSortDirection('asc');
+      fetchAdvocates(searchTerm, currentPage, field, 'asc');
     }
   };
 
-  const getSortedAdvocates = () => {
-    if (!filteredAdvocates) {
-      return [];
-    }
-
-    return [...filteredAdvocates].sort((a, b) => {
-      let aValue: any;
-      let bValue: any;
-
-      switch (sortField) {
-        case 'firstName':
-          aValue = a.firstName.toLowerCase();
-          bValue = b.firstName.toLowerCase();
-          break;
-        case 'lastName':
-          aValue = a.lastName.toLowerCase();
-          bValue = b.lastName.toLowerCase();
-          break;
-        case 'city':
-          aValue = a.city.toLowerCase();
-          bValue = b.city.toLowerCase();
-          break;
-        case 'degree':
-          aValue = a.degree.toLowerCase();
-          bValue = b.degree.toLowerCase();
-          break;
-        case 'specialties':
-          aValue = a.specialties.join(', ').toLowerCase();
-          bValue = b.specialties.join(', ').toLowerCase();
-          break;
-        case 'yearsOfExperience':
-          aValue = a.yearsOfExperience;
-          bValue = b.yearsOfExperience;
-          break;
-        case 'phoneNumber':
-          aValue = a.phoneNumber;
-          bValue = b.phoneNumber;
-          break;
-        default:
-          return 0;
-      }
-
-      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
-      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+    fetchAdvocates(searchTerm, newPage, sortField, sortDirection);
   };
 
   const SortIcon = ({ field }: { field: SortField }) => {
@@ -121,15 +121,13 @@ export default function Home() {
     return sortDirection === 'asc' ? <span className="text-blue-600">↑</span> : <span className="text-blue-600">↓</span>;
   };
 
-  const sortedAdvocates = getSortedAdvocates();
-
   return (
-            <main className="min-h-screen bg-gray-100 p-6">
-          <div className="max-w-7xl mx-auto">
-            <h1 className="text-4xl font-bold text-gray-900 mb-8 text-center">Solace Advocates</h1>
-            
-            {/* Search Section */}
-            <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+    <main className="min-h-screen bg-gray-100 p-6">
+      <div className="max-w-7xl mx-auto">
+        <h1 className="text-4xl font-bold text-gray-900 mb-8 text-center">Solace Advocates</h1>
+        
+        {/* Search Section */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
           <div className="flex flex-col sm:flex-row gap-4 items-end justify-between">
             <div className="flex-1 w-full sm:w-auto">
               <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-2">
@@ -158,6 +156,18 @@ export default function Home() {
           )}
         </div>
 
+        {/* Results Summary */}
+        <div className="bg-white rounded-lg shadow-md p-4 mb-4">
+          <div className="flex justify-between items-center">
+            <p className="text-sm text-gray-600">
+              Showing {filteredAdvocates.length} of {totalCount} advocates
+            </p>
+            {isLoading && (
+              <div className="text-blue-600 text-sm">Loading...</div>
+            )}
+          </div>
+        </div>
+
         {/* Table Section */}
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           <div className="overflow-x-auto">
@@ -175,7 +185,7 @@ export default function Home() {
                   ].map(({ field, label }) => (
                     <th
                       key={field}
-                      className="px-6 py-4 text-left text-sm font-semibold cursor-pointer hover:bg-blue-700 transition-colors"
+                      className="px-6 py-4 text-left text-sm font-semibold cursor-pointer hover:bg-blue-600 transition-colors"
                       onClick={() => handleSort(field as SortField)}
                     >
                       <div className="flex items-center gap-2">
@@ -187,7 +197,7 @@ export default function Home() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {sortedAdvocates.map((advocate: Advocate, index: number) => {
+                {filteredAdvocates?.map((advocate: Advocate, index: number) => {
                   const rowKey =
                     advocate.id ??
                     advocate.phoneNumber ??
@@ -213,7 +223,7 @@ export default function Home() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-wrap gap-1">
-                          {advocate.specialties.map((specialty: string) => (
+                          {advocate.specialties?.map((specialty: string) => (
                             <span
                               key={specialty}
                               className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
@@ -238,9 +248,36 @@ export default function Home() {
             </table>
           </div>
           
-          {sortedAdvocates.length === 0 && (
+          {filteredAdvocates.length === 0 && !isLoading && (
             <div className="text-center py-12">
               <p className="text-gray-500 text-lg">No advocates found matching your search criteria.</p>
+            </div>
+          )}
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="px-6 py-4 border-t border-gray-200">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-gray-700">
+                  Page {currentPage} of {totalPages}
+                </div>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>
