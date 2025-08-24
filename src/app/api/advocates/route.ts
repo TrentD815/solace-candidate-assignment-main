@@ -24,7 +24,9 @@ export async function GET(request: NextRequest) {
         ilike(advocates.firstName, `%${search}%`),
         ilike(advocates.lastName, `%${search}%`),
         ilike(advocates.city, `%${search}%`),
-        ilike(advocates.degree, `%${search}%`)
+        ilike(advocates.degree, `%${search}%`),
+        sql`CAST(${advocates.phoneNumber} AS TEXT) ILIKE ${`%${search}%`}`,
+        sql`${advocates.specialties}::text ILIKE ${`%${search}%`}`
       );
     }
 
@@ -33,10 +35,8 @@ export async function GET(request: NextRequest) {
       .select({ count: count() })
       .from(advocates)
       .where(whereConditions);
-    
     const totalCount = totalCountResult[0]?.count || 0;
-
-    // Build the main query with sorting and pagination
+    
     const offset = (page - 1) * limit;
     
     // Determine the sort column
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
         sortColumn = advocates.firstName;
     }
 
-    // Build and execute the query with proper sorting
+    // Build and execute query with proper sorting
     const results = await db
       .select()
       .from(advocates)

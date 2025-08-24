@@ -8,3 +8,6 @@ With more time I would do the following:
 - Backend
     - Rate limiting to prevent users from hitting the API too often
     - Caching of responses to prevent unecessary API calls if the data was already retrieved
+    - Add DB indexes on fields commonly searched to improve search speeds
+    - Add DB connection pooling to prevent unecessary DB connections on each API call
+    - Modularize codebase a bit. Move certain operations to dedicated files/functions to further separate business logic and DB layer, etc
